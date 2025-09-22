@@ -1,69 +1,35 @@
-# React + TypeScript + Vite
+## RTK Query + TypeScript `exactOptionalPropertyTypes` Repro
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Minimal reproduction of a (likely) incorrect type interaction between **RTK Query** and the **TypeScript** compiler option `"exactOptionalPropertyTypes"`.
 
-Currently, two official plugins are available:
+When `exactOptionalPropertyTypes` is enabled, the `data` property returned from an RTK Query hook (even after a guard like `if (result.isSuccess)`) remains typed as possibly `undefined`. The same pattern appears for `error` after `isError` checks.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Without this flag, control flow narrowing works as expected and `data` is treated as definitely defined inside an `isSuccess` block.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### TL;DR
+| Scenario | Inside `if (result.isSuccess) {}` | Type of `result.data` |
+|----------|----------------------------------|-----------------------|
+| `exactOptionalPropertyTypes: false` | Narrowed | `Pokemon` |
+| `exactOptionalPropertyTypes: true`  | Not fully narrowed | `Pokemon | undefined` |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Repo Contents
+Key files that show the issue:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+* `src/api.ts` – Defines the `pokemonApi` with a simple `getPokemonByName` query.
+* `src/App.tsx` – Calls `useGetPokemonByNameQuery('bulbasaur')` and logs the result.
+* `tsconfig.app.json` – Enables the `"exactOptionalPropertyTypes"` compiler option.
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+```ts
+// src/App.tsx (excerpt)
+const result = useGetPokemonByNameQuery('bulbasaur')
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+if (result.isSuccess) {
+	// Expect: result.data: Pokemon
+	// Actual (with exactOptionalPropertyTypes = true): Pokemon | undefined
+	console.log(result.data.id)
+}
 ```
